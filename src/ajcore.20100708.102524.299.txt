@@ -1,0 +1,126 @@
+---- AspectJ Properties ---
+AspectJ Compiler 1.6.8 built on Friday Jan 8, 2010 at 21:53:37 GMT
+---- Dump Properties ---
+Dump file: ajcore.20100708.102524.299.txt
+Dump reason: java.lang.RuntimeException
+Dump on exception: true
+Dump at exit condition: abort
+---- Exception Information ---
+java.lang.RuntimeException: Problem processing attributes in c:\tmp\aspects\MboCut.class
+	at org.aspectj.weaver.bcel.BcelObjectType.ensureAspectJAttributesUnpacked(BcelObjectType.java:381)
+	at org.aspectj.weaver.bcel.BcelObjectType.<init>(BcelObjectType.java:159)
+	at org.aspectj.weaver.bcel.BcelWorld.buildBcelDelegate(BcelWorld.java:382)
+	at org.aspectj.weaver.bcel.BcelWorld.addSourceObjectType(BcelWorld.java:462)
+	at org.aspectj.weaver.bcel.BcelWorld.addSourceObjectType(BcelWorld.java:428)
+	at org.aspectj.weaver.bcel.BcelWeaver.addClassFile(BcelWeaver.java:458)
+	at org.aspectj.weaver.bcel.BcelWeaver.addClassFile(BcelWeaver.java:482)
+	at org.aspectj.ajdt.internal.core.builder.AjBuildManager.initBcelWorld(AjBuildManager.java:895)
+	at org.aspectj.ajdt.internal.core.builder.AjBuildManager.performBuild(AjBuildManager.java:245)
+	at org.aspectj.ajdt.internal.core.builder.AjBuildManager.batchBuild(AjBuildManager.java:181)
+	at org.aspectj.ajdt.ajc.AjdtCommand.doCommand(AjdtCommand.java:112)
+	at org.aspectj.ajdt.ajc.AjdtCommand.runCommand(AjdtCommand.java:60)
+	at org.aspectj.tools.ajc.Main.run(Main.java:355)
+	at org.aspectj.tools.ajc.Main.runMain(Main.java:234)
+	at org.aspectj.tools.ajc.Main.main(Main.java:84)
+Caused by: org.aspectj.weaver.BCException: Unable to continue, this version of AspectJ supports classes built with weaver version 6.0 but the class aspects.MboCut is version 7.0
+when batch building BuildConfig[null] #Files=1 AopXmls=#0
+
+	at org.aspectj.weaver.bcel.Utility.readAjAttributes(Utility.java:83)
+	at org.aspectj.weaver.bcel.BcelObjectType.ensureAspectJAttributesUnpacked(BcelObjectType.java:378)
+	... 14 more
+---- System Properties ---
+java.runtime.name=Java(TM) SE Runtime Environment
+sun.boot.library.path=C:\Program Files\Java\jre6\bin
+java.vm.version=16.3-b01
+java.vm.vendor=Sun Microsystems Inc.
+java.vendor.url=http://java.sun.com/
+path.separator=;
+java.vm.name=Java HotSpot(TM) Client VM
+file.encoding.pkg=sun.io
+sun.java.launcher=SUN_STANDARD
+user.country=US
+sun.os.patch.level=Service Pack 2
+java.vm.specification.name=Java Virtual Machine Specification
+user.dir=C:\Documents and Settings\7000471\workspace\aspectMaximo\src
+java.runtime.version=1.6.0_20-b02
+java.awt.graphicsenv=sun.awt.Win32GraphicsEnvironment
+java.endorsed.dirs=C:\Program Files\Java\jre6\lib\endorsed
+os.arch=x86
+java.io.tmpdir=C:\DOCUME~1\7000471\LOCALS~1\Temp\
+line.separator=
+
+java.vm.specification.vendor=Sun Microsystems Inc.
+user.variant=
+os.name=Windows XP
+sun.jnu.encoding=Cp1252
+java.library.path=C:\Program Files\Java\jre6\bin;.;C:\WINDOWS\Sun\Java\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\Program Files\Java\jdk1.6.0_20\bin;c:\putty;C:\oracle\product\10.2.0\client_1\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\Program Files\Common Files\Roxio Shared\DLLShared\;C:\Program Files\Common Files\Roxio Shared\DLLShared\;C:\Program Files\Common Files\Roxio Shared\9.0\DLLShared\;C:\Program Files\Microsoft SQL Server\80\Tools\BINN;C:\Program Files\Windows Imaging\;C:\dusan\Vim\vim72;C:\Program Files\Enterprise Vault\EVClient\;C:\Program Files\QuickTime\QTSystem\;c:\dusan\tptp\eclipse\plugins\org.eclipse.tptp.platform.ac.win_ia32_4.4.300.v201006031900\agent_controller\bin\;c:\dusan\aspectj1.6\bin;.
+java.specification.name=Java Platform API Specification
+java.class.version=50.0
+sun.management.compiler=HotSpot Client Compiler
+os.version=5.1
+user.home=C:\Documents and Settings\7000471
+user.timezone=Asia/Muscat
+java.awt.printerjob=sun.awt.windows.WPrinterJob
+file.encoding=Cp1252
+java.specification.version=1.6
+java.class.path=c:\dusan\aspectj1.6\lib\aspectjtools.jar;C:\Program Files\Java\jre6\lib\tools.jar;
+user.name=7000471
+java.vm.specification.version=1.0
+java.home=C:\Program Files\Java\jre6
+sun.arch.data.model=32
+user.language=en
+java.specification.vendor=Sun Microsystems Inc.
+awt.toolkit=sun.awt.windows.WToolkit
+java.vm.info=mixed mode
+java.version=1.6.0_20
+java.ext.dirs=C:\Program Files\Java\jre6\lib\ext;C:\WINDOWS\Sun\Java\lib\ext
+sun.boot.class.path=C:\Program Files\Java\jre6\lib\resources.jar;C:\Program Files\Java\jre6\lib\rt.jar;C:\Program Files\Java\jre6\lib\sunrsasign.jar;C:\Program Files\Java\jre6\lib\jsse.jar;C:\Program Files\Java\jre6\lib\jce.jar;C:\Program Files\Java\jre6\lib\charsets.jar;C:\Program Files\Java\jre6\classes
+java.vendor=Sun Microsystems Inc.
+file.separator=\
+java.vendor.url.bug=http://java.sun.com/cgi-bin/bugreport.cgi
+sun.io.unicode.encoding=UnicodeLittle
+sun.cpu.endian=little
+sun.desktop=windows
+sun.cpu.isalist=pentium_pro+mmx pentium_pro pentium+mmx pentium i486 i386 i86
+---- Command Line ---
+-inpath
+c:\dusan\maxdev_aspect\applications\maximo\businessobjects\classes
+-d
+c:/tmp/
+aspects/MboCut.aj
+---- Full Classpath ---
+Empty
+---- Compiler Messages ---
+warning couldn't find aspectjrt.jar on classpath, checked: C:\Program Files\Java\jre6\lib\resources.jar;C:\Program Files\Java\jre6\lib\rt.jar;C:\Program Files\Java\jre6\lib\sunrsasign.jar;C:\Program Files\Java\jre6\lib\jsse.jar;C:\Program Files\Java\jre6\lib\jce.jar;C:\Program Files\Java\jre6\lib\charsets.jar;C:\Program Files\Java\jre6\classes;C:\dusan\maxdev_aspect\applications\maximo\businessobjects\classes;C:\Program Files\Java\jre6\lib\ext\access-bridge.jar;C:\Program Files\Java\jre6\lib\ext\dnsns.jar;C:\Program Files\Java\jre6\lib\ext\jaccess.jar;C:\Program Files\Java\jre6\lib\ext\localedata.jar;C:\Program Files\Java\jre6\lib\ext\QTJava.zip;C:\Program Files\Java\jre6\lib\ext\sunjce_provider.jar;C:\Program Files\Java\jre6\lib\ext\sunmscapi.jar;C:\Program Files\Java\jre6\lib\ext\sunpkcs11.jar;C:\Program Files\Java\jre6\lib\tools.jar
+abort ABORT -- (RuntimeException) Problem processing attributes in c:\tmp\aspects\MboCut.class
+Problem processing attributes in c:\tmp\aspects\MboCut.class
+java.lang.RuntimeException: Problem processing attributes in c:\tmp\aspects\MboCut.class
+	at org.aspectj.weaver.bcel.BcelObjectType.ensureAspectJAttributesUnpacked(BcelObjectType.java:381)
+	at org.aspectj.weaver.bcel.BcelObjectType.<init>(BcelObjectType.java:159)
+	at org.aspectj.weaver.bcel.BcelWorld.buildBcelDelegate(BcelWorld.java:382)
+	at org.aspectj.weaver.bcel.BcelWorld.addSourceObjectType(BcelWorld.java:462)
+	at org.aspectj.weaver.bcel.BcelWorld.addSourceObjectType(BcelWorld.java:428)
+	at org.aspectj.weaver.bcel.BcelWeaver.addClassFile(BcelWeaver.java:458)
+	at org.aspectj.weaver.bcel.BcelWeaver.addClassFile(BcelWeaver.java:482)
+	at org.aspectj.ajdt.internal.core.builder.AjBuildManager.initBcelWorld(AjBuildManager.java:895)
+	at org.aspectj.ajdt.internal.core.builder.AjBuildManager.performBuild(AjBuildManager.java:245)
+	at org.aspectj.ajdt.internal.core.builder.AjBuildManager.batchBuild(AjBuildManager.java:181)
+	at org.aspectj.ajdt.ajc.AjdtCommand.doCommand(AjdtCommand.java:112)
+	at org.aspectj.ajdt.ajc.AjdtCommand.runCommand(AjdtCommand.java:60)
+	at org.aspectj.tools.ajc.Main.run(Main.java:355)
+	at org.aspectj.tools.ajc.Main.runMain(Main.java:234)
+	at org.aspectj.tools.ajc.Main.main(Main.java:84)
+Caused by: org.aspectj.weaver.BCException: Unable to continue, this version of AspectJ supports classes built with weaver version 6.0 but the class aspects.MboCut is version 7.0
+when batch building BuildConfig[null] #Files=1 AopXmls=#0
+
+	at org.aspectj.weaver.bcel.Utility.readAjAttributes(Utility.java:83)
+	at org.aspectj.weaver.bcel.BcelObjectType.ensureAspectJAttributesUnpacked(BcelObjectType.java:378)
+	... 14 more
+
+---- org.aspectj.weaver.bcel.BcelWorld@121f1d ----
+Shadow mungers:
+Empty
+Type mungers:
+Empty
+Late Type mungers:
+Empty

@@ -1,0 +1,1078 @@
+/*      */ package custom.app.po;
+/*      */ 
+/*      */ import custom.app.common.Utils;
+/*      */ import custom.app.pr.PRExt;
+/*      */ import custom.app.rfq.QuotationLineExt;
+/*      */ import custom.app.rfq.RFQExt;
+/*      */ import java.rmi.RemoteException;
+/*      */ import java.util.ArrayList;
+/*      */ import java.util.Calendar;
+/*      */ import java.util.Collection;
+/*      */ import java.util.Date;
+/*      */ import java.util.HashMap;
+/*      */ import java.util.HashSet;
+/*      */ import java.util.Iterator;
+/*      */ import java.util.Map;
+/*      */ import java.util.TimeZone;
+/*      */ import java.util.Vector;
+/*      */ import psdi.app.common.purchasing.PurchasingMbo;
+/*      */ import psdi.app.inventory.InventoryRemote;
+/*      */ import psdi.app.po.PO;
+/*      */ import psdi.app.po.POLine;
+/*      */ import psdi.app.po.POLineRemote;
+/*      */ import psdi.app.pr.PRLineRemote;
+/*      */ import psdi.app.pr.PRRemote;
+/*      */ import psdi.app.pr.PRStatusRemote;
+/*      */ import psdi.app.rfq.RFQLineRemote;
+/*      */ import psdi.mbo.Mbo;
+/*      */ import psdi.mbo.MboRemote;
+/*      */ import psdi.mbo.MboServerInterface;
+/*      */ import psdi.mbo.MboSet;
+/*      */ import psdi.mbo.MboSetRemote;
+/*      */ import psdi.mbo.MboValue;
+/*      */ import psdi.mbo.MboValueInfo;
+/*      */ import psdi.mbo.SqlFormat;
+/*      */ import psdi.mbo.StatefulMbo;
+/*      */ import psdi.mbo.StatusHandler;
+/*      */ import psdi.mbo.Translate;
+/*      */ import psdi.security.UserInfo;
+/*      */ import psdi.server.BulletinBoardServiceRemote;
+/*      */ import psdi.server.MXServer;
+/*      */ import psdi.server.MaxVarServiceRemote;
+/*      */ import psdi.util.MXApplicationException;
+/*      */ import psdi.util.MXException;
+/*      */ import psdi.util.Message;
+/*      */ import psdi.util.Resolver;
+/*      */ 
+/*      */ public class POExt extends PO
+/*      */   implements PORemoteExt
+/*      */ {
+/*      */   public POExt(MboSet ms)
+/*      */     throws MXException, RemoteException
+/*      */   {
+/*   39 */     super(ms);
+/*      */   }
+/*      */ 
+/*      */   protected StatusHandler getStatusHandler() {
+/*      */     try {
+/*   44 */       if ("RFT".equals(super.getString("APPTYPE")))
+/*   45 */         return new RFTStatusHandler(this);
+/*      */     }
+/*      */     catch (RemoteException e) {
+/*   48 */       e.printStackTrace();
+/*      */     } catch (MXException e) {
+/*   50 */       e.printStackTrace();
+/*      */     }
+/*   52 */     return new PoStatusHandlerExt(this);
+/*      */   }
+/*      */ 
+/*      */   public String getStatusListName() {
+/*      */     try {
+/*   57 */       String app = super.getThisMboSet().getApp();
+/*   58 */       if (app != null) {
+/*   59 */         if (app.equals("SWO")) {
+/*   60 */           return "SWOSTATUS";
+/*      */         }
+/*   62 */         if ("RFT".equals(app))
+/*   63 */           return "RFTSTATUS";
+/*      */       }
+/*      */     }
+/*      */     catch (RemoteException e) {
+/*   67 */       e.printStackTrace();
+/*   68 */       throw new RuntimeException(e);
+/*      */     }
+/*      */ 
+/*   71 */     return super.getStatusListName();
+/*      */   }
+/*      */ 
+/*      */   public void save() throws MXException, RemoteException
+/*      */   {
+/*   76 */     MboSetRemote polines = getMboSet("POLINE");
+/*   77 */     int size = polines.count();
+/*   78 */     int i = 0;
+/*   79 */     if (size > 0) {
+/*   80 */       Date min = null;
+/*   81 */       Date max = null;
+/*   82 */       while (i < size) {
+/*   83 */         MboRemote currentLine = polines.getMbo(i);
+/*   84 */         if ((!(currentLine.toBeDeleted())) && 
+/*   85 */           (!(currentLine.isNull("VENDELIVERYDATE")))) {
+/*   86 */           Date currentLineDate = currentLine
+/*   87 */             .getDate("VENDELIVERYDATE");
+/*   88 */           if ((min == null) || (min.after(currentLineDate))) {
+/*   89 */             min = currentLineDate;
+/*      */           }
+/*   91 */           if ((max == null) || (max.before(currentLineDate))) {
+/*   92 */             max = currentLineDate;
+/*      */           }
+/*      */ 
+/*      */         }
+/*      */ 
+/*  102 */         if (currentLine.toBeDeleted()) {
+/*  103 */           delinkPOAndRFQLines(currentLine);
+/*      */         }
+/*  105 */         ++i;
+/*      */       }
+/*      */ 
+/*  108 */       super.setValue("REQUIREDDATE", min, 11L);
+/*  109 */       super.setValue("VENDELIVERYDATE", max, 11L);
+/*      */     }
+/*  111 */     if (super.isNew()) {
+/*  112 */       String ponum = super.getString("PONUM");
+/*  113 */       SqlFormat sqlf = new SqlFormat(super.getUserInfo(), 
+/*  114 */         "ponum=:0 and ORGID=:1");
+/*  115 */       sqlf.setObject(0, "PO", "PONUM", ponum);
+/*  116 */       String orgid = super.getString("ORGID");
+/*  117 */       sqlf.setObject(1, "PO", "ORGID", orgid);
+/*  118 */       MboSetRemote set = super.getMboSet("$PO", "PO");
+/*  119 */       set.setWhere(sqlf.format());
+/*  120 */       set.reset();
+/*  121 */       if (set.count() > 0) {
+/*  122 */         Object[] params = { "PO=" + ponum + ", Organization=" + orgid };
+/*  123 */         throw new MXApplicationException("system", "duplicatekey", 
+/*  124 */           params);
+/*      */       }
+/*  126 */       super.setValue("PAYONRECEIPT", false, 11L);
+/*      */     }
+/*      */ 
+/*  129 */     super.save();
+/*      */   }
+/*      */ 
+/*      */   private void delinkPOAndRFQLines(MboRemote poLineRemote)
+/*      */     throws RemoteException, MXException
+/*      */   {
+/*  135 */     String ponum = poLineRemote.getString("ponum");
+/*  136 */     String polinenum = poLineRemote.getString("polinenum");
+/*  137 */     String polineid = poLineRemote.getString("polineid");
+/*      */ 
+/*  143 */     SqlFormat sqf = new SqlFormat(super.getUserInfo(), 
+/*  144 */       "prnum in (select prnum from prline where ponum=:1 ) ");
+/*  145 */     sqf.setObject(1, "PRLINE", "ponum", ponum);
+/*      */ 
+/*  147 */     MboSetRemote mboPRSet = super.getMboSet("$getponum" + 
+/*  148 */       poLineRemote.getString("polineid"), "pr", sqf.format());
+/*      */ 
+/*  150 */     SqlFormat sqlf = new SqlFormat(super.getUserInfo(), 
+/*  151 */       "ponum=:1 and polinenum=:2");
+/*  152 */     sqlf.setObject(1, "RFQLINE", "ponum", ponum);
+/*  153 */     sqlf.setObject(2, "RFQLINE", "polinenum", polinenum);
+/*      */ 
+/*  155 */     MboSetRemote mboRFQLineSet = super.getMboSet("$rfqline" + 
+/*  156 */       poLineRemote.getString("polineid"), "rfqline", sqlf.format());
+/*  157 */     MboRemote linkedPR = mboPRSet.getMbo(0);
+/*  158 */     MboRemote linkedRFQ = mboRFQLineSet.getMbo(0);
+/*  159 */     int m = 0;
+/*      */     while (true) {
+/*  161 */       MboRemote prRemote = mboPRSet.getMbo(m);
+/*  162 */       if (prRemote == null)
+/*      */         break;
+/*  164 */       MboSetRemote prLineSet = prRemote.getMboSet("PRLINE");
+/*  165 */       int n = 0;
+/*      */       while (true) {
+/*  167 */         MboRemote prLineRemote = prLineSet.getMbo(n);
+/*  168 */         if (prLineRemote == null)
+/*      */           break;
+/*  170 */         if (prLineRemote.getString("polineid").equals(polineid))
+/*  171 */           ((PRLineRemote)prLineRemote).setNullValuesToPOVariables();
+/*  172 */         ++n;
+/*      */       }
+/*  174 */       ++m;
+/*      */     }
+/*      */ 
+/*  180 */     if (linkedRFQ != null)
+/*  181 */       ((RFQLineRemote)linkedRFQ).setNullValuesToPOVariables();
+/*      */   }
+/*      */ 
+/*      */   public void setRelatedMboEditibility(String relationName, MboSetRemote mboSet)
+/*      */     throws MXException, RemoteException
+/*      */   {
+/*  188 */     super.setRelatedMboEditibility(relationName, mboSet);
+/*      */ 
+/*  190 */     if (relationName.equals("DOCLINKS")) {
+/*  191 */       super.setRelatedMboEditibility(relationName, mboSet);
+/*  192 */       if (deleteAddStatusSet()) {
+/*  193 */         mboSet.setFlag(7L, false);
+/*      */       }
+/*  195 */       return;
+/*      */     }
+/*      */ 
+/*  198 */     String app = super.getThisMboSet().getApp();
+/*  199 */     if ((!("SWO".equals(app))) || (
+/*  200 */       (!("CAN".equalsIgnoreCase(super.getInternalStatus()))) && 
+/*  201 */       (!("CLOSE"
+/*  201 */       .equalsIgnoreCase(super.getInternalStatus()))))) return;
+/*  202 */     super.setFlag(7L, true);
+/*      */   }
+/*      */ 
+/*      */   private boolean docLinksAlwaysAccessible() throws RemoteException, MXException
+/*      */   {
+/*  207 */     MboRemote personGroup = super.getMboSet("#pg", "PERSONGROUP", 
+/*  208 */       "PERSONGROUP='CDP_CLOSE'").getMbo(0);
+/*  209 */     MboSetRemote allUsers = personGroup.getMboSet("ALLPEOPLEINPERSONGROUP");
+/*  210 */     allUsers.setUserWhere("personid='" + super.getUserInfo().getUserName() + "'");
+/*  211 */     allUsers.reset();
+/*  212 */     return (!(allUsers.isEmpty()));
+/*      */   }
+/*      */ 
+/*      */   protected void setEditibilityFlags(boolean flag)
+/*      */     throws MXException, RemoteException
+/*      */   {
+/*  221 */     super.setEditibilityFlags(flag);
+/*  222 */     String[] poFields = { "ACTCOMPDATE", "SUPERVISOR", 
+/*  223 */       "DESCRIPTION_LONGDESCRIPTION", "PRTYPE", "DEPARTMENT", "PROJ", 
+/*  224 */       "ORIGREF", "PURMODE", "SHUTID", "AREA", "REQUESTEDBY", 
+/*  225 */       "FOLLOWUPDATE", "VENDELIVERYDATE" };
+/*  226 */     super.setFieldFlag(poFields, 7L, flag);
+/*      */   }
+/*      */ 
+/*      */   public void add() throws MXException, RemoteException
+/*      */   {
+/*  231 */     super.add();
+/*  232 */     super.setValue("buyahead", false, 11L);
+/*  233 */     if ((super.getThisMboSet().getApp() == null) || 
+/*  234 */       (super.getThisMboSet().getApp().equals("PO"))) {
+/*  235 */       super.setValue("APPTYPE", "PO", 11L);
+/*  236 */       super.getMboValue("PONUM").autoKey();
+/*      */ 
+/*  238 */       Date creationDate = super.getDate("ORDERDATE");
+/*  239 */       long towWeeks = 1209600000L;
+/*  240 */       Date deliveryDate = new Date(creationDate.getTime() + towWeeks);
+/*  241 */       super.setValue("REQUIREDDATE", deliveryDate, 11L);
+/*  242 */       super.setValue("VENDELIVERYDATE", deliveryDate, 11L);
+/*  243 */     } else if (super.getThisMboSet().getApp().equals("IA")) {
+/*  244 */       super.setValue("APPTYPE", "INSP", 11L);
+/*  245 */       super.setValue("POTYPE", "INSP", 11L);
+/*  246 */       super.getMboValue("PONUM").autoKey();
+/*  247 */     } else if (super.getThisMboSet().getApp().equals("SWO")) {
+/*  248 */       super.setValue("APPTYPE", "SWO", 11L);
+/*  249 */       super.setValue("PAYONRECEIPT", false, 11L);
+/*  250 */       if (super.isNull("PONUM"))
+/*  251 */         super.getMboValue("PONUM").autoKey();
+/*  252 */     } else if (super.getThisMboSet().getApp().equals("RO")) {
+/*  253 */       super.setValue("APPTYPE", "RO", 11L);
+/*  254 */       super.setValue("PAYONRECEIPT", false, 11L);
+/*  255 */       super.setValue("requestedby", super.getUserName(), 11L);
+/*  256 */     } else if (super.getThisMboSet().getApp().equals("RFT")) {
+/*  257 */       super.getMboValue("PONUM").autoKey();
+/*  258 */       super.setValue("APPTYPE", "RFT", 11L);
+/*  259 */       super.setValue("INTERNAL", true, 11L);
+/*  260 */       super.setValue("RECEIPTS", "NONE", 11L);
+/*      */     }
+/*      */   }
+/*      */ 
+/*      */   public void createIA() throws RemoteException, MXException {
+/*  265 */     Mbo ia = (Mbo)getMboSet("RELATEDIA").add();
+/*  266 */     ia.setValue("APPTYPE", "INSP", 11L);
+/*  267 */     ia.setValue("POTYPE", "INSP", 11L);
+/*  268 */     ia.getMboValue("PONUM").autoKey();
+/*  269 */     ia.setValue("RELPO", super.getString("PONUM"));
+/*  270 */     ia.setValue("DESCRIPTION", super.getString("DESCRIPTION"), 11L);
+/*  271 */     ia.setValue("VENDOR", super.getString("LOCALVENDOR"), 2L);
+/*  272 */     ia.setValue("CONTACT", super.getString("CONTACT"), 2L);
+/*  273 */     ia.setValue("PURCHASEAGENT", super.getString("PURCHASEAGENT"), 2L);
+/*  274 */     ia.setValue("REQUIREDDATE", super.getString("REQUIREDDATE"), 2L);
+/*  275 */     ia.setValue("VENDELIVERYDATE", super.getString("VENDELIVERYDATE"), 2L);
+/*  276 */     ia.setValue("LOCALVENDOR", super.getString("VENDOR"), 2L);
+/*      */   }
+/*      */ 
+/*      */   public void duplicateIA() throws MXException, RemoteException {
+/*  280 */     MboSetRemote iaSet = getMboSet("RELATEDIA");
+/*  281 */     if (iaSet.isEmpty()) {
+/*  282 */       throw new MXApplicationException("poext", "emptyia");
+/*      */     }
+/*  284 */     Mbo duplicatedIA = (Mbo)iaSet.getMbo(0).duplicate();
+/*  285 */     duplicatedIA.getMboValue("PONUM").autoKey();
+/*      */   }
+/*      */ 
+/*      */   public MboRemote createSupplementOrder(String ponum, String description) throws MXException, RemoteException
+/*      */   {
+/*  290 */     super.getThisMboSet().setAutoKeyFlag(false);
+/*  291 */     MboRemote poRemote = duplicate();
+/*  292 */     super.getThisMboSet().setAutoKeyFlag(true);
+/*  293 */     poRemote.setValue("ponum", ponum, 11L);
+/*  294 */     poRemote.setValue("originalponum", super.getString("ponum"), 11L);
+/*  295 */     poRemote.setValue("description", description, 11L);
+/*  296 */     poRemote.setValue("potype", super.getTranslator().toExternalDefaultValue(
+/*  297 */       "POTYPE", "CHG", this), 11L);
+/*  298 */     MXServer.getBulletinBoard().post("PO.CREATESUPORDER", super.getUserInfo());
+/*      */ 
+/*  302 */     return poRemote;
+/*      */   }
+/*      */ 
+/*      */   public void canCreateSupOrder() throws RemoteException, MXException
+/*      */   {
+/*      */   }
+/*      */ 
+/*      */   public void init() throws MXException {
+/*  310 */     super.init();
+/*  311 */     super.getMboValue("siteid").setReadOnly(false);
+/*      */     try {
+/*  313 */       String app = super.getThisMboSet().getApp();
+/*  314 */       if ((app != null) && (app.equals("RFT"))) {
+/*  315 */         super.setFieldFlag("storeloc", 7L, false);
+/*  316 */         super.setFieldFlag("storelocsiteid", 7L, false);
+/*      */       }
+/*  318 */       if ((app == null) || 
+/*  319 */         (!(app.equals("SWO"))) || 
+/*  320 */         ("WAPPR".equals(super.getInternalStatus())) || (super.getInternalStatus() == null)) return;
+/*  321 */       super.setFieldFlag("CONTRACTCLASS", 7L, true);
+/*  322 */       super.setFieldFlag("CONTRACTCATEGORY", 7L, true);
+/*  323 */       super.setFieldFlag("BANKGUARANTEE", 7L, true);
+/*  324 */       super.setFieldFlag("DURATION", 7L, true);
+/*      */     }
+/*      */     catch (RemoteException e) {
+/*  327 */       e.printStackTrace();
+/*  328 */       throw new MXApplicationException("system", "systemerror");
+/*      */     }
+/*      */   }
+/*      */ 
+/*      */   public MboSetRemote getList(String attribute) throws MXException, RemoteException
+/*      */   {
+/*  334 */     String app = super.getThisMboSet().getApp();
+/*  335 */     if (attribute.equalsIgnoreCase("status")) {
+/*  336 */       return getStatusList(app);
+/*      */     }
+/*  338 */     return super.getList(attribute);
+/*      */   }
+/*      */ 
+/*      */   private MboSetRemote getStatusList(String app) throws RemoteException, MXException
+/*      */   {
+/*  343 */     if (app != null) {
+/*  344 */       if ((app.equals("SWO")) || ("RECEIPTS".equals(app))) {
+/*  345 */         return getStatusForApp("SWOSTATUS");
+/*      */       }
+/*  347 */       if (app.equals("RFT")) {
+/*  348 */         return getStatusForApp("RFTSTATUS");
+/*      */       }
+/*      */     }
+/*  351 */     return super.getList("status");
+/*      */   }
+/*      */ 
+/*      */   private MboSetRemote getStatusForApp(String domainid) throws MXException, RemoteException
+/*      */   {
+/*  356 */     SqlFormat sqlf = new SqlFormat("domainid=:0");
+/*  357 */     sqlf.setObject(0, "SYNONYMDOMAIN", "domainid", domainid);
+/*  358 */     MboSetRemote mbs = super.getMboSet(domainid + "$", "SYNONYMDOMAIN", sqlf
+/*  359 */       .format());
+/*  360 */     return mbs;
+/*      */   }
+/*      */ 
+/*      */   public void canDeleteAttachedDocs()
+/*      */     throws MXException, RemoteException
+/*      */   {
+/*  367 */     if (!(deleteAddStatusSet())) {
+/*  368 */       super.canDeleteAttachedDocs();
+/*  369 */       return;
+/*      */     }
+/*  371 */     if (!(canDeleteDoclinks()))
+/*  372 */       throw new MXApplicationException("access", "notauthorized");
+/*      */   }
+/*      */ 
+/*      */   private boolean canDeleteDoclinks()
+/*      */     throws RemoteException, MXException
+/*      */   {
+/*  384 */     return ((!(super.getMboSet(
+/*  380 */       "$#dlaw", 
+/*  381 */       "GROUPUSER", 
+/*  382 */       "userid='" + super.getUserInfo().getUserName() + 
+/*  383 */       "' and groupname in\t ('CDP','CDP/6')").isEmpty())) && 
+/*  384 */       (deleteAddStatusSet()));
+/*      */   }
+/*      */ 
+/*      */   private boolean deleteAddStatusSet() throws RemoteException, MXException
+/*      */   {
+/*  389 */     return super.getString("status").startsWith("PODOC");
+/*      */   }
+/*      */ 
+/*      */   public void changeStatus(String status, Date date, String memo, long accessModifier) throws MXException, RemoteException
+/*      */   {
+/*  394 */     if (("RFT".equals(super.getString("APPTYPE"))) && (getMboSet("POLINE").isEmpty()) && 
+/*  395 */       ("APPR".equals(status))) {
+/*  396 */       throw new MXApplicationException("inventory", "nolines");
+/*      */     }
+/*  398 */     super.changeStatus(status, date, memo, accessModifier);
+/*      */ 
+/*  400 */     MboSetRemote polineSet = getMboSet("POLINE");
+/*      */ 
+/*  402 */     if ((super.getInternalStatus().equalsIgnoreCase("CLOSE")) && 
+/*  403 */       (super.getString("RECEIPTS").equals("PARTIAL")) && 
+/*  406 */       (!(polineSet.isEmpty()))) {
+/*  407 */       closePO(polineSet);
+/*      */     }
+/*      */ 
+/*  410 */     if ((!(super.getInternalStatus().equalsIgnoreCase("CLOSE"))) || 
+/*  411 */       (!(super.getString("RECEIPTS").equals("NONE"))) || 
+/*  414 */       (polineSet.isEmpty())) return;
+/*  415 */     closePOForNoneRec(polineSet);
+/*      */   }
+/*      */ 
+/*      */   public MboSetRemote getMboSet(String name)
+/*      */     throws MXException, RemoteException
+/*      */   {
+/*  423 */     MboSetRemote mboSet = null;
+/*      */     try {
+/*  425 */       mboSet = super.getMboSet(name);
+/*      */     }
+/*      */     catch (MXException e) {
+/*  428 */       e.printStackTrace();
+/*  429 */       throw e;
+/*      */     }
+/*  431 */     return mboSet;
+/*      */   }
+/*      */ 
+/*      */   private void closePO(MboSetRemote polineSet) throws RemoteException, MXException
+/*      */   {
+/*  436 */     if (MXServer.getBulletinBoard().isPosted("PO.PARTCHGORDER", 
+/*  437 */       super.getUserInfo()))
+/*      */     {
+/*  445 */       return;
+/*      */     }
+/*  447 */     MboRemote poline = polineSet.getMbo(0);
+/*  448 */     String crt = "  PONUM = '" + super.getString("PONUM") + 
+/*  449 */       "' and POLINENUM in (";
+/*  450 */     boolean first = true;
+/*  451 */     boolean hasPoLines = false;
+/*  452 */     for (int i = 0; polineSet.getMbo(++i) != null; ) {
+/*  453 */       if (polineSet.getMbo(i).getDouble("RECEIVEDQTY") == 0.0D) {
+/*  454 */         hasPoLines = true;
+/*  455 */         if (!(first))
+/*  456 */           crt = crt + ", ";
+/*      */         else {
+/*  458 */           first = false;
+/*      */         }
+/*  460 */         crt = crt + "'" + polineSet.getMbo(i).getString("POLINENUM") + 
+/*  461 */           "'";
+/*      */       }
+/*      */     }
+/*  464 */     if (!(hasPoLines)) {
+/*  465 */       throw new MXApplicationException("po", 
+/*  466 */         "canNotClosePoWithNoLinesNone");
+/*      */     }
+/*      */ 
+/*  469 */     crt = crt + ")";
+/*  470 */     MboRemote rfq = super.getMboSet(
+/*  471 */       "RFQ_$", 
+/*  472 */       "RFQ", 
+/*  473 */       "RFQNUM ='" + poline.getString("RFQNUM") + "' and siteid ='" + 
+/*  474 */       super.getString("siteid") + "'").getMbo(0);
+/*  475 */     if (rfq != null) {
+/*  476 */       rfq.setValue("HISTORYFLAG", false, 11L);
+/*  477 */       rfq.setValue("STATUS", "SENT", 11L);
+/*      */ 
+/*  479 */       MboSetRemote rfqLines = super.getMboSet("RFQLINE_$", "RFQLINE", crt + 
+/*  480 */         " and rfqnum='" + rfq.getString("rfqnum") + 
+/*  481 */         "' and siteid ='" + rfq.getString("siteid") + "'");
+/*  482 */       for (int i = 0; rfqLines.getMbo(++i) != null; )
+/*      */       {
+/*  484 */         MboRemote rfqline = rfqLines.getMbo(i);
+/*  485 */         rfqline.setValueNull("POLINENUM", 11L);
+/*  486 */         rfqline.setValueNull("POLINEID", 11L);
+/*  487 */         rfqline.setValueNull("PONUM", 11L);
+/*      */       }
+/*      */     }
+/*      */ 
+/*  491 */     MboRemote pr = super.getMboSet(
+/*  492 */       "PR_$", 
+/*  493 */       "PR", 
+/*  494 */       "PRNUM ='" + poline.getString("PRNUM") + "' and siteid ='" + 
+/*  495 */       super.getString("siteid") + "'").getMbo(0);
+/*  496 */     if (pr != null) {
+/*  497 */       pr.setValue("HISTORYFLAG", false, 11L);
+/*  498 */       pr.setValue("STATUS", "APPR", 11L);
+/*      */ 
+/*  500 */       MboSetRemote prlines = super.getMboSet("PRLINE_$", "PRLINE", crt + 
+/*  501 */         " and prnum='" + pr.getString("prnum") + 
+/*  502 */         "' and siteid ='" + pr.getString("siteid") + "'");
+/*  503 */       for (int i = 0; prlines.getMbo(++i) != null; ) {
+/*  504 */         MboRemote prline = prlines.getMbo(i);
+/*  505 */         prline.setValueNull("POLINENUM", 11L);
+/*  506 */         prline.setValueNull("POLINEID", 11L);
+/*  507 */         prline.setValueNull("PONUM", 11L);
+/*      */       }
+/*      */     }
+/*      */   }
+/*      */ 
+/*      */   private void closePOForNoneRec(MboSetRemote polineSet)
+/*      */     throws RemoteException, MXException
+/*      */   {
+/*  515 */     if (MXServer.getBulletinBoard().isPosted("PO.PARTCHGORDER", 
+/*  516 */       super.getUserInfo()))
+/*      */     {
+/*  524 */       return;
+/*      */     }
+/*  526 */     MboRemote poline = polineSet.getMbo(0);
+/*  527 */     if (polineSet.count() == 0) {
+/*  528 */       return;
+/*      */     }
+/*  530 */     String crt = "  PONUM = '" + super.getString("PONUM") + 
+/*  531 */       "' and POLINENUM in (";
+/*  532 */     for (int i = 0; polineSet.getMbo(++i) != null; ) {
+/*  533 */       crt = crt + "'" + polineSet.getMbo(i).getString("POLINENUM") + "',";
+/*      */     }
+/*  535 */     String crt1 = crt.substring(0, crt.length() - 1);
+/*  536 */     crt1 = crt1 + ")";
+/*  537 */     MboRemote rfq = super.getMboSet(
+/*  538 */       "RFQ_$", 
+/*  539 */       "RFQ", 
+/*  540 */       "RFQNUM ='" + poline.getString("RFQNUM") + "' and siteid ='" + 
+/*  541 */       super.getString("siteid") + "'").getMbo(0);
+/*  542 */     if (rfq != null) {
+/*  543 */       rfq.setValue("HISTORYFLAG", false, 11L);
+/*  544 */       rfq.setValue("STATUS", "SENT", 11L);
+/*  545 */       MboSetRemote rfqLines = super.getMboSet("RFQLINE_$", "RFQLINE", crt1 + 
+/*  546 */         " and rfqnum='" + rfq.getString("rfqnum") + 
+/*  547 */         "' and siteid ='" + rfq.getString("siteid") + "'");
+/*  548 */       for (int i = 0; rfqLines.getMbo(++i) != null; ) {
+/*  549 */         MboRemote rfqline = rfqLines.getMbo(i);
+/*  550 */         rfqline.setValueNull("POLINENUM", 11L);
+/*  551 */         rfqline.setValueNull("POLINEID", 11L);
+/*  552 */         rfqline.setValueNull("PONUM", 11L);
+/*      */       }
+/*      */     }
+/*  555 */     MboRemote pr = super.getMboSet(
+/*  556 */       "PR_$", 
+/*  557 */       "PR", 
+/*  558 */       "PRNUM ='" + poline.getString("PRNUM") + "' and siteid ='" + 
+/*  559 */       super.getString("siteid") + "'").getMbo(0);
+/*  560 */     if (pr != null) {
+/*  561 */       pr.setValue("HISTORYFLAG", false, 11L);
+/*  562 */       pr.setValue("STATUS", "APPR", 11L);
+/*  563 */       MboSetRemote prlines = super.getMboSet("PRLINE_$", "PRLINE", crt1 + 
+/*  564 */         " and prnum='" + pr.getString("prnum") + 
+/*  565 */         "' and siteid ='" + pr.getString("siteid") + "'");
+/*  566 */       for (int i = 0; prlines.getMbo(++i) != null; ) {
+/*  567 */         MboRemote prline = prlines.getMbo(i);
+/*  568 */         prline.setValueNull("POLINENUM", 11L);
+/*  569 */         prline.setValueNull("POLINEID", 11L);
+/*  570 */         prline.setValueNull("PONUM", 11L);
+/*      */       }
+/*      */     }
+/*      */   }
+/*      */ 
+/*      */   public void prorateServices() throws RemoteException, MXException {
+/*  576 */     MboSetRemote poLines = getMboSet("POLINE");
+/*  577 */     double tempTotalProrateServiceCost = 0.0D;
+/*  578 */     double tempTotalMaterialCost = 0.0D;
+/*  579 */     boolean onlyDirectIssue = false;
+/*  580 */     if (super.getMboServer().getMaxVar().getBoolean("PRSPECIALDIRECT", 
+/*  581 */       super.getOrgSiteForMaxvar("PRSPECIALDIRECT")))
+/*  582 */       onlyDirectIssue = true;
+/*  583 */     int i = 0;
+/*      */     while (true) {
+/*  585 */       POLine oneLine = (POLine)poLines.getMbo(i);
+/*  586 */       if (oneLine == null)
+/*      */         break;
+/*  588 */       if (oneLine.getBoolean("prorateservice"))
+/*  589 */         tempTotalProrateServiceCost += oneLine.getDouble("loadedcost");
+/*  590 */       if ((!(oneLine.isServiceType())) && ((
+/*  591 */         (oneLine.getBoolean("issue")) || (!(onlyDirectIssue)))))
+/*  592 */         tempTotalMaterialCost += oneLine.getDouble("linecost");
+/*  593 */       ++i;
+/*      */     }
+/*  595 */     if ((tempTotalProrateServiceCost == 0.0D) || 
+/*  596 */       (tempTotalMaterialCost == 0.0D))
+/*  597 */       return;
+/*  598 */     double prorateFactor = tempTotalProrateServiceCost / 
+/*  599 */       tempTotalMaterialCost;
+/*  600 */     i = 0;
+/*      */     while (true) {
+/*  602 */       POLine oneLine = (POLine)poLines.getMbo(i);
+/*  603 */       if (oneLine == null) return;
+/*  604 */       if ((!(oneLine.isServiceType())) && ((
+/*  605 */         (oneLine.getBoolean("issue")) || (!(onlyDirectIssue))))) {
+/*  606 */         oneLine.setValue("proratecost", oneLine
+/*  607 */           .getDouble("linecost") * 
+/*  608 */           prorateFactor, 2L);
+/*  609 */         oneLine.setValue("loadedcost", oneLine
+/*  610 */           .getDouble("loadedcost") + 
+/*  611 */           oneLine.getDouble("proratecost"), 2L);
+/*  612 */       } else if (oneLine.getBoolean("prorateservice")) {
+/*  613 */         oneLine.setValue("proratecost", 
+/*  614 */           -oneLine
+/*  614 */           .getDouble("loadedcost"), 2L);
+/*  615 */         oneLine.setValue("loadedcost", 0, 2L);
+/*      */       }
+/*  617 */       ++i;
+/*      */     }
+/*      */   }
+/*      */ 
+/*      */   public MboRemote duplicate()
+/*      */     throws MXException, RemoteException
+/*      */   {
+/*  625 */     MboRemote result = super.duplicate();
+/*      */ 
+/*  627 */     result.setValue("EXCHANGERATE", super.getExchangeRate(MXServer.getMXServer()
+/*  628 */       .getDate()), 11L);
+/*  629 */     return result;
+/*      */   }
+/*      */ 
+/*      */   public MboRemote createChangeOrder(String ponum, String description)
+/*      */     throws MXException, RemoteException
+/*      */   {
+/*  636 */     MboRemote result = super.createChangeOrder(ponum, description);
+/*  637 */     result.setValue("EXCHANGERATE", super.getString("EXCHANGERATE"), 11L);
+/*  638 */     resetPONumOnRFQLines(ponum);
+/*  639 */     return result;
+/*      */   }
+/*      */ 
+/*      */   public MboRemote createPartialChangeOrder(String ponum, String description) throws MXException, RemoteException
+/*      */   {
+/*  644 */     if (createPartialChangeOrderNotAllowed()) {
+/*  645 */       MXServer.getBulletinBoard()
+/*  646 */         .remove("PO.PARTCHGORDER", super.getUserInfo());
+/*  647 */       throw new MXApplicationException("po", "justpartial");
+/*      */     }
+/*      */ 
+/*  650 */     POLine.loadSkipFieldCopyHashSet();
+/*  651 */     POLine.getHashSet().remove("POLINENUM");
+/*  652 */     POLine.getHashSet().remove("MRNUM");
+/*  653 */     POLine.getHashSet().remove("MRLINENUM");
+/*  654 */     POLine.getHashSet().remove("REQUESTEDBY");
+/*  655 */     POLine.getHashSet().remove("RECEIPTSCOMPLETE");
+/*      */ 
+/*  659 */     POLine.getHashSet().remove("REJECTEDQTY");
+/*  660 */     POLine.getHashSet().remove("ORGID");
+/*  661 */     POLine.getHashSet().remove("SITEID");
+/*      */ 
+/*  663 */     PORemoteExt poRemote = null;
+/*      */ 
+/*  665 */     MXServer.getBulletinBoard().post("PO.CREATECHGORDER", super.getUserInfo());
+/*      */     try
+/*      */     {
+/*  668 */       super.getThisMboSet().setAutoKeyFlag(false);
+/*  669 */       poRemote = (PORemoteExt)duplicate();
+/*  670 */       super.getThisMboSet().setAutoKeyFlag(true);
+/*  671 */       poRemote.setValue("ponum", ponum);
+/*  672 */       poRemote.setValue("orgid", super.getString("orgid"));
+/*  673 */       poRemote.setValue("siteid", super.getString("siteid"));
+/*  674 */       poRemote.setValue("originalponum", super.getString("ponum"), 11L);
+/*      */ 
+/*  676 */       poRemote.setValue("description", description);
+/*      */ 
+/*  678 */       poRemote.setValue("potype", super.getTranslator().toExternalDefaultValue(
+/*  679 */         "POTYPE", "CHG", this), 11L);
+/*      */ 
+/*  681 */       String memo = Resolver.getResolver().getMessage("po", 
+/*  682 */         "AllowedCreationOfChangeOrder").getMessage();
+/*      */ 
+/*  684 */       super.changeStatus(super.getTranslator().toExternalDefaultValue(
+/*  685 */         "POSTATUS", "CLOSE", this), MXServer.getMXServer()
+/*  686 */         .getDate(), memo);
+/*      */ 
+/*  688 */       poRemote.fixProrateLinesBeforeDeletion();
+/*  689 */       poRemote.deleteCompleteLines();
+/*      */ 
+/*  691 */       reMapRFQAndPRLinks(poRemote);
+/*  692 */       poRemote.setValue("receipts", "NONE", 11L);
+/*      */ 
+/*  694 */       MboSetRemote poLines = poRemote.getMboSet("POLINE");
+/*  695 */       for (MboRemote mr = poLines.moveFirst(); mr != null; mr = poLines
+/*  696 */         .moveNext())
+/*      */       {
+/*  697 */         mr.setValue("receiptscomplete", false, 11L);
+/*      */       }
+/*      */     }
+/*      */     finally {
+/*  701 */       POLine.getHashSet().add("POLINENUM");
+/*  702 */       POLine.getHashSet().add("MRNUM");
+/*  703 */       POLine.getHashSet().add("MRLINENUM");
+/*  704 */       POLine.getHashSet().add("REQUESTEDBY");
+/*      */ 
+/*  706 */       POLine.getHashSet().add("RECEIPTSCOMPLETE");
+/*      */ 
+/*  710 */       POLine.getHashSet().add("REJECTEDQTY");
+/*  711 */       POLine.getHashSet().add("ORGID");
+/*  712 */       POLine.getHashSet().add("SITEID");
+/*  713 */       MXServer.getBulletinBoard().remove("PO.CREATECHGORDER", 
+/*  714 */         super.getUserInfo());
+/*      */     }
+/*      */ 
+/*  718 */     return poRemote;
+/*      */   }
+/*      */ 
+/*      */   private boolean createPartialChangeOrderNotAllowed()
+/*      */     throws MXException, RemoteException
+/*      */   {
+/*  731 */     if (!(getMboSet("MATRECTRANS").isEmpty())) {
+/*  732 */       return false;
+/*      */     }
+/*      */ 
+/*  735 */     return (getMboSet("SERVRECTRANS").isEmpty());
+/*      */   }
+/*      */ 
+/*      */   public void updateInternalLeadTime(InventoryRemote invmbo)
+/*      */     throws MXException, RemoteException
+/*      */   {
+/*  752 */     MboSetRemote polines = getMboSet("POLINE");
+/*  753 */     int i = 0;
+/*      */     while (true) {
+/*  755 */       POLineRemote poline = (POLineRemote)polines.getMbo(i++);
+/*  756 */       if (poline == null) {
+/*      */         return;
+/*      */       }
+/*  759 */       if (poline.getString("STORELOC") == null) {
+/*      */         continue;
+/*      */       }
+/*  762 */       Date prApprovalDate = getPrApprovalDate(poline);
+/*  763 */       if (prApprovalDate == null) {
+/*  764 */         invmbo.setValue("INTERNALLEAD", 0);
+/*      */       }
+/*      */ 
+/*  768 */       Date date = getLastPOApprDate();
+/*      */ 
+/*  770 */       int dayDiff = Utils.getDayDifference(
+/*  771 */         prApprovalDate, date);
+/*      */ 
+/*  782 */       invmbo.setValue("INTERNALLEAD", dayDiff);
+/*      */     }
+/*      */   }
+/*      */ 
+/*      */   private Date getLastPOApprDate() throws RemoteException, MXException
+/*      */   {
+/*  788 */     MboSetRemote poStatusSet = getMboSet("POSTATUS");
+/*  789 */     poStatusSet.setWhere("status='APPR'");
+/*  790 */     poStatusSet.setOrderBy("changedate desc");
+/*  791 */     if (poStatusSet.isEmpty()) {
+/*  792 */       return null;
+/*      */     }
+/*  794 */     return poStatusSet.getMbo(0).getDate("CHANGEDATE");
+/*      */   }
+/*      */ 
+/*      */   private Date getPrApprovalDate(POLineRemote poline) throws RemoteException, MXException
+/*      */   {
+/*  799 */     MboSetRemote prlinesSet = poline.getMboSet("#PRLLL#", "PRLINE", 
+/*  800 */       "polineid=" + poline.getLong("polineid"));
+/*  801 */     Date prApprovalDate = null;
+/*  802 */     if (!(prlinesSet.isEmpty())) {
+/*  803 */       PRLineRemote prline = (PRLineRemote)prlinesSet.getMbo(0);
+/*  804 */       PRRemote pr = (PRRemote)prline.getMboSet("PR").getMbo(0);
+/*  805 */       PRStatusRemote prApprStatus = (PRStatusRemote)pr.getMboSet(
+/*  806 */         "PRSTATUS", 
+/*  807 */         "PRSTATUS", 
+/*  808 */         "STATUS = 'APPRO' and prnum='" + pr.getString("prnum") + 
+/*  809 */         "'").getMbo(0);
+/*  810 */       if (prApprStatus == null) {
+/*  811 */         return null;
+/*      */       }
+/*  813 */       prApprovalDate = prApprStatus.getDate("CHANGEDATE");
+/*      */     }
+/*  815 */     return prApprovalDate;
+/*      */   }
+/*      */ 
+/*      */   public static int getDayDifference(Date date1, Date date2) {
+/*  819 */     Calendar time1 = Calendar.getInstance();
+/*  820 */     time1.setTime(date1);
+/*  821 */     time1.set(11, 0);
+/*  822 */     time1.set(12, 0);
+/*  823 */     time1.set(13, 0);
+/*  824 */     time1.set(14, 0);
+/*      */ 
+/*  826 */     Calendar time2 = Calendar.getInstance();
+/*  827 */     time2.setTime(date2);
+/*  828 */     time2.set(11, 0);
+/*  829 */     time2.set(12, 0);
+/*  830 */     time2.set(13, 0);
+/*  831 */     time2.set(14, 0);
+/*      */ 
+/*  833 */     long difMilli = time2.getTimeInMillis() + 
+/*  834 */       time2.getTimeZone().getOffset(time2.getTimeInMillis()) - 
+/*  835 */       time1.getTimeInMillis() - 
+/*  836 */       time1.getTimeZone().getOffset(time1.getTimeInMillis());
+/*      */ 
+/*  838 */     return (int)((float)difMilli / 86400000.0F);
+/*      */   }
+/*      */ 
+/*      */   private void reMapRFQAndPRLinks(MboRemote copyPo) throws RemoteException, MXException
+/*      */   {
+/*  843 */     String originalPoNum = super.getString("PONUM");
+/*  844 */     String poNum = copyPo.getString("PONUM");
+/*  845 */     Map linesMap = new HashMap();
+/*  846 */     MboSetRemote copyPoLineSet = copyPo.getMboSet("POLINE");
+/*      */ 
+/*  849 */     for (MboRemote poLine = copyPoLineSet.moveFirst(); poLine != null; poLine = copyPoLineSet
+/*  850 */       .moveNext())
+/*      */     {
+/*  851 */       int poLineNum = poLine.getInt("POLINENUM");
+/*  852 */       MboRemote origPOLine = super.getMboSet("$_origPoLines", "POLINE", 
+/*  853 */         "ponum='" + originalPoNum + "' and polinenum=" + poLineNum)
+/*  854 */         .getMbo(0);
+/*  855 */       long poLineIdOrig = origPOLine.getUniqueIDValue();
+/*      */ 
+/*  857 */       if ((poLine.getBoolean("RECEIPTSCOMPLETE")) && 
+/*  858 */         (!(poLine.getBoolean("PRORATESERVICE")))) {
+/*      */         continue;
+/*      */       }
+/*  861 */       linesMap.put(
+/*  862 */         new POLineKey(this, originalPoNum, poLineNum, 
+/*  862 */         poLineIdOrig), 
+/*  864 */         new POLineKey(this, poNum, poLine
+/*  863 */         .getInt("POLINENUM"), poLine.getUniqueIDValue(), poLine
+/*  864 */         .getString("ORGID"), poLine.getString("SITEID")));
+/*      */ 
+/*  870 */       double orderQty = poLine.getDouble("ORDERQTY");
+/*  871 */       double receivedQty = poLine.getDouble("RECEIVEDQTY");
+/*      */ 
+/*  873 */       poLine.setValue("ORDERQTY", orderQty - receivedQty);
+/*  874 */       poLine.setValueNull("RECEIVEDQTY", 11L);
+/*      */     }
+/*      */ 
+/*  878 */     MboSetRemote poLineSet = getMboSet("POLINE");
+/*      */ 
+/*  880 */     for (MboRemote poLine = poLineSet.moveFirst(); poLine != null; poLine = poLineSet
+/*  881 */       .moveNext())
+/*      */     {
+/*  882 */       POLineKey poLineKey = new POLineKey(this, poLine);
+/*  883 */       if (linesMap.containsKey(poLineKey)) {
+/*  884 */         POLineKey value = (POLineKey)linesMap.get(poLineKey);
+/*  885 */         fixReferencedLine(poLine, value, "RFQLINE");
+/*  886 */         fixReferencedLine(poLine, value, "PRLINE");
+/*      */       }
+/*      */     }
+/*      */   }
+/*      */ 
+/*      */   private void fixReferencedLine(MboRemote poLine, POLineKey value, String mboSetName)
+/*      */     throws MXException, RemoteException
+/*      */   {
+/*  907 */     MboRemote mr = poLine.getMboSet(
+/*  908 */       "$" + mboSetName + "#", 
+/*  909 */       mboSetName, 
+/*  910 */       "ponum='" + poLine.getString("PONUM") + "' and polinenum=" + 
+/*  911 */       poLine.getString("POLINENUM")).getMbo(0);
+/*      */ 
+/*  913 */     if (mr != null) {
+/*  914 */       mr.setValue("PONUM", value.poNum, 11L);
+/*  915 */       mr.setValue("POLINENUM", value.poLineNum, 11L);
+/*  916 */       mr.setValue("POLINEID", value.poLineId, 11L);
+/*      */     }
+/*      */   }
+/*      */ 
+/*      */   public void fixProrateLinesBeforeDeletion()
+/*      */     throws RemoteException, MXException
+/*      */   {
+/*  934 */     double sumlinecost = 0.0D;
+/*  935 */     double quotedsum = 0.0D;
+/*      */ 
+/*  937 */     MboSetRemote poLineSet = getMboSet("POLINE");
+/*      */ 
+/*  939 */     for (MboRemote pl = poLineSet.moveFirst(); pl != null; pl = poLineSet
+/*  940 */       .moveNext())
+/*      */     {
+/*  941 */       if (pl.getBoolean("PRORATESERVICE")) {
+/*      */         continue;
+/*      */       }
+/*  944 */       double lineCost = pl.getDouble("LINECOST");
+/*  945 */       double orderQty = pl.getDouble("ORDERQTY");
+/*  946 */       double receivedQty = pl.getDouble("RECEIVEDQTY");
+/*      */ 
+/*  948 */       quotedsum += lineCost * (1.0D - (receivedQty / orderQty));
+/*  949 */       sumlinecost += lineCost;
+/*      */     }
+/*      */ 
+/*  952 */     if (sumlinecost == 0.0D) {
+/*  953 */       return;
+/*      */     }
+/*  955 */     double quot = quotedsum / sumlinecost;
+/*  956 */     for (MboRemote pl = poLineSet.moveFirst(); pl != null; pl = poLineSet
+/*  957 */       .moveNext())
+/*      */     {
+/*  958 */       if (pl.getBoolean("PRORATESERVICE")) {
+/*  959 */         double unitCost = pl.getDouble("UNITCOST");
+/*  960 */         double orderQty = pl.getDouble("ORDERQTY");
+/*  961 */         pl.setValue("UNITCOST", unitCost * quot);
+/*  962 */         pl.setValue("ORDERQTY", orderQty);
+/*      */ 
+/*  964 */         pl.setValueNull("RECEIVEDQTY", 11L);
+/*  965 */         pl.setValue("RECEIPTSCOMPLETE", false, 11L);
+/*      */       }
+/*      */     }
+/*      */   }
+/*      */ 
+/*      */   public void deleteCompleteLines() throws MXException, RemoteException
+/*      */   {
+/*  972 */     MboSetRemote mboSet = getMboSet("POLINE");
+/*  973 */     int cnt = 0;
+/*  974 */     int dlt = 0;
+/*  975 */     for (POLineExt mr = (POLineExt)mboSet.moveFirst(); mr != null; mr = (POLineExt)mboSet
+/*  976 */       .moveNext())
+/*      */     {
+/*  977 */       ++cnt;
+/*  978 */       mr.getMboSet("POCOST").deleteAll();
+/*  979 */       if ((mr.getBoolean("RECEIPTSCOMPLETE")) && 
+/*  980 */         (!(mr.getBoolean("PRORATESERVICE")))) {
+/*  981 */         mr.delete(7L);
+/*  982 */         ++dlt;
+/*      */       } else {
+/*  984 */         String origPoNum = super.getString("ORIGINALPONUM");
+/*  985 */         long polinenum = mr.getLong("POLINENUM");
+/*  986 */         MboSetRemote origPOCostSet = super.getMboSet("origPOLine$", "POLINE", 
+/*  987 */           "PONUM='" + origPoNum + "' and polinenum=" + polinenum)
+/*  988 */           .getMbo(0).getMboSet("POCOST");
+/*  989 */         for (MboRemote oc = origPOCostSet.moveFirst(); oc != null; oc = origPOCostSet
+/*  990 */           .moveNext())
+/*      */         {
+/*  991 */           MboRemote newCost = mr.getMboSet("POCOST").add();
+/*  992 */           newCost.setValue("LINECOST", oc.getDouble("LINECOST"));
+/*      */ 
+/*  995 */           newCost.setValue("PERCENTAGE", oc.getDouble("PERCENTAGE"));
+/*  996 */           newCost.setValue("QUANTITY", oc.getDouble("QUANTITY"));
+/*  997 */           newCost
+/*  998 */             .setValue("GLDEBITACCT", oc
+/*  999 */             .getString("GLDEBITACCT"));
+/*      */         }
+/*      */       }
+/*      */     }
+/*      */   }
+/*      */ 
+/*      */   protected boolean skipCopyField(MboValueInfo mvi)
+/*      */     throws RemoteException, MXException
+/*      */   {
+/* 1011 */     if (mvi.getName().equals("selfbill")) {
+/* 1012 */       return true;
+/*      */     }
+/* 1014 */     return super.skipCopyField(mvi);
+/*      */   }
+/*      */ 
+/*      */   public ArrayList checkQuotationsCurrency(MboSetRemote quotations) throws RemoteException, MXException
+/*      */   {
+/* 1019 */     ArrayList result = new ArrayList();
+/* 1020 */     if (quotations.isEmpty())
+/* 1021 */       return result;
+/* 1022 */     Vector rfqLineSize = quotations.getSelection();
+/* 1023 */     if (rfqLineSize.size() == 0)
+/* 1024 */       return result;
+/* 1025 */     quotations.resetWithSelection();
+/* 1026 */     QuotationLineExt quotationLine = (QuotationLineExt)quotations
+/* 1027 */       .moveFirst();
+/* 1028 */     while (quotationLine != null) {
+/* 1029 */       String poCurrency = super.getString("CURRENCYCODE");
+/* 1030 */       MboSetRemote vendors = quotationLine.getMboSet("RFQVENDOR");
+/* 1031 */       vendors.reset();
+/* 1032 */       String quotCurrency = vendors.getMbo(0).getString("CURRENCYCODE");
+/* 1033 */       if (!(poCurrency.equals(quotCurrency))) {
+/* 1034 */         String[] params = { quotationLine.getString("RFQNUM"), 
+/* 1035 */           quotationLine.getString("RFQLINENUM") };
+/* 1036 */         throw new MXApplicationException("po", "notsamecurr", params);
+/*      */       }
+/* 1038 */       result.add(quotationLine);
+/* 1039 */       quotationLine = (QuotationLineExt)quotations.moveNext();
+/*      */     }
+/* 1041 */     return result;
+/*      */   }
+/*      */ 
+/*      */   public Collection copyQuotationLinesToPO(ArrayList quotations) throws RemoteException, MXException
+/*      */   {
+/* 1046 */     if (quotations.isEmpty())
+/* 1047 */       return new ArrayList();
+/* 1048 */     HashMap rfqs = new HashMap();
+/* 1049 */     for (int i = 0; i < quotations.size(); ++i) {
+/* 1050 */       QuotationLineExt quotationLine = (QuotationLineExt)quotations
+/* 1051 */         .get(i);
+/* 1052 */       String rfqnum = quotationLine.getString("RFQNUM");
+/* 1053 */       if (!(rfqs.containsKey(rfqnum))) {
+/* 1054 */         rfqs.put(rfqnum, quotationLine);
+/*      */       }
+/* 1056 */       MboSetRemote rfqLineSet = quotationLine.getMboSet("RFQLINE");
+/* 1057 */       rfqLineSet.reset();
+/* 1058 */       quotationLine.copyThisQuotationLineToPOLine(this, 
+/* 1059 */         rfqLineSet.getMbo(0));
+/*      */     }
+/*      */ 
+/* 1062 */     return rfqs.values();
+/*      */   }
+/*      */ 
+/*      */   public void updateRFQsPRsStatus(Collection rfqs) throws MXException, RemoteException
+/*      */   {
+/* 1067 */     boolean prChange = super.getMboServer().getMaxVar().getBoolean("PRCHANGE", 
+/* 1068 */       super.getOrgSiteForMaxvar("PRCHANGE"));
+/* 1069 */     if (!(prChange)) {
+/* 1070 */       return;
+/*      */     }
+/* 1072 */     for (Iterator iterator = rfqs.iterator(); iterator.hasNext(); ) {
+/* 1073 */       QuotationLineExt quotation = (QuotationLineExt)iterator.next();
+/* 1074 */       RFQExt rfq = (RFQExt)quotation.getMboSet("RFQ").getMbo(0);
+/* 1075 */       MboSetRemote rfqLineSet = rfq.getMboSet("RFQLINE");
+/* 1076 */       rfqLineSet.reset();
+/* 1077 */       if (isLinePOContNumFilled(rfqLineSet)) {
+/* 1078 */         String status = super.getTranslator().toExternalDefaultValue(
+/* 1079 */           "RFQSTAT", "CLOSE", rfq);
+/* 1080 */         rfq.changeStatus(status, MXServer.getMXServer().getDate(), "");
+/*      */       }
+/* 1082 */       MboSetRemote prLineSet = rfq.getMboSet("PRLINE");
+/* 1083 */       if ((!(prLineSet.isEmpty())) && (isLinePOContNumFilled(prLineSet))) {
+/* 1084 */         PRExt pr = (PRExt)prLineSet.getMbo(0).getMboSet("PR")
+/* 1085 */           .getMbo(0);
+/* 1086 */         String status = super.getTranslator().toExternalDefaultValue(
+/* 1087 */           "PRSTATUS", "COMP", pr);
+/* 1088 */         pr.changeStatus(status, MXServer.getMXServer().getDate(), "");
+/*      */       }
+/*      */     }
+/*      */   }
+/*      */ 
+/*      */   private boolean isLinePOContNumFilled(MboSetRemote lineSet) throws MXException, RemoteException
+/*      */   {
+/* 1095 */     if (lineSet == null)
+/* 1096 */       return false;
+/* 1097 */     if (lineSet.isEmpty())
+/* 1098 */       return false;
+/* 1099 */     int i = 0;
+/*      */     while (true) {
+/* 1101 */       MboRemote line = lineSet.getMbo(i);
+/* 1102 */       if (line == null) break;
+/* 1103 */       if ((line.getString("ponum").equals("")) && 
+/* 1104 */         (line.getString("contractnum").equals("")))
+/* 1105 */         return false;
+/* 1106 */       ++i;
+/*      */     }
+/* 1108 */     return true;
+/*      */   }
+/*      */ 
+/*      */   private void resetPONumOnRFQLines(String ponum)
+/*      */     throws MXException, RemoteException
+/*      */   {
+/* 1115 */     SqlFormat sqf = new SqlFormat(super.getUserInfo(), "ponum = :1");
+/* 1116 */     sqf.setObject(1, "RFQLINE", "ponum", super.getString("ponum"));
+/* 1117 */     MboSetRemote rfqLineSet = super.getMboSet("$rfqline", "rfqline", sqf.format());
+/* 1118 */     int i = 0;
+/*      */     while (true) {
+/* 1120 */       MboRemote rfqLineRemote = rfqLineSet.getMbo(i);
+/* 1121 */       if (rfqLineRemote == null) return;
+/* 1122 */       rfqLineRemote.setValue("ponum", ponum, 11L);
+/* 1123 */       ++i;
+/*      */     }
+/*      */   }
+/*      */ 
+/*      */   public void determineReceiptStatus(POLineRemote poLine)
+/*      */     throws RemoteException, MXException
+/*      */   {
+/* 1134 */     super.determineReceiptStatus(poLine);
+/* 1135 */     MboSetRemote poLineSet = getMboSet("POLINE");
+/* 1136 */     int cnt = poLineSet.count();
+/* 1137 */     boolean allcomplete = cnt != 0;
+/* 1138 */     boolean firstProrated = false;
+/* 1139 */     for (int i = 0; i < cnt; ++i) {
+/* 1140 */       MboRemote mr = poLineSet.getMbo(i);
+/* 1141 */       if ((!(mr.isNull("prorateservice"))) && (mr.getBoolean("prorateservice")))
+/*      */       {
+/* 1145 */         if (i == 0) {
+/* 1146 */           firstProrated = true;
+/* 1147 */           allcomplete = false;
+/*      */         }
+/*      */       }
+/*      */       else {
+/* 1151 */         if (firstProrated) {
+/* 1152 */           allcomplete = true;
+/* 1153 */           firstProrated = false;
+/*      */         }
+/* 1155 */         allcomplete &= mr.getBoolean("receiptscomplete");
+/*      */       }
+/*      */     }
+/* 1158 */     if (allcomplete)
+/* 1159 */       super.setValue("receipts", "COMPLETE", 11L);
+/*      */   }
+/*      */ }
+
+/* Location:           C:\dusan\maxdev_aspect\applications\maximo\businessobjects\classes\
+ * Qualified Name:     custom.app.po.POExt
+ * Java Class Version: 1.1 (45.3)
+ * JD-Core Version:    0.5.3
+ */

@@ -1,0 +1,109 @@
+<project name="aspectj-examples" default="build-test" basedir=".">
+<property file="build.properties"/>
+
+<path id="src.path">
+	<dirset dir="src">
+	<include name="*.aj"/>
+	<!--include name="**/*.aj"/>
+	<exclude name="**.*.java"/-->
+	</dirset>
+</path>
+
+
+
+<target name="init.taskdefs">
+<!-- sets name of new task to iajc, old task to ajc -->
+<taskdef resource="org/aspectj/tools/ant/taskdefs/aspectjTaskdefs.properties">
+<classpath>
+<pathelement path="${aspectj.dir}/lib/aspectjtools.jar"/>
+</classpath>
+</taskdef>
+<property name="taskdefs.init" value="true"/>
+</target>
+
+<target name="makedir">
+	<mkdir dir="temp"/>
+	<mkdir dir="output"/>
+</target>
+
+<target name="purge">
+<delete includeemptydirs="true">
+    <fileset dir="temp" includes="**/*"/>
+    <fileset dir="output" includes="**/*"/>
+  </delete>
+</target>
+
+<target name="copy" depends="makedir,purge" >
+<copy todir="temp">
+
+<fileset dir="src">
+<include name="aspects/**/*.*" />
+<include name="storage/**/*.*" />
+<!--include name="psdi/**/*.*" />
+<include name="custom/**/*.*" /-->
+      <!--exclude name="**/*.java"/-->
+    </fileset>
+</copy>
+</target>
+
+<fileset dir="lib">
+
+</fileset>
+<target name="build-test" depends="init.taskdefs,copy">
+    <iajc destdir="output" 
+incremental="false" 
+source="1.4"
+verbose="true"
+maxmem="1024m"
+fork="true"
+>
+      <sourceroots>
+<pathelement location="temp" />
+
+
+      </sourceroots>
+      <inpath>
+	<pathelement location="${maximo.dir}/applications/maximo/businessobjects/classes"/>
+      </inpath>
+      <aspectpath>
+      </aspectpath>
+      <classpath>
+        <pathelement location="${aspectj.dir}/lib/aspectjrt.jar"/>
+	<pathelement location="${maximo.dir}/applications/maximo/businessobjects/classes"/>
+	<fileset dir="${maximo.dir}/applications/maximo/lib">
+		<include name="**/*.jar" />
+		<include name="**/*.zip" />
+	</fileset>
+      </classpath>
+    </iajc>
+    
+  </target>
+<target name="compile" depends="init.taskdefs,copy">
+    <iajc destdir="output" 
+incremental="false" 
+source="1.4"
+verbose="true"
+maxmem="1024m"
+fork="true"
+>
+      <sourceroots>
+<pathelement location="temp" />
+
+
+      </sourceroots>
+      <inpath>
+      </inpath>
+      <aspectpath>
+      </aspectpath>
+      <classpath>
+        <pathelement location="${aspectj.dir}/lib/aspectjrt.jar"/>
+	<pathelement location="${maximo.dir}/applications/maximo/businessobjects/classes"/>
+	<fileset dir="${maximo.dir}/applications/maximo/lib">
+		<include name="**/*.jar" />
+		<include name="**/*.zip" />
+	</fileset>
+      </classpath>
+    </iajc>
+    
+  </target>
+</project>
